@@ -1,0 +1,10 @@
+.vs
+bin
+*.obj
+obj
+*.log
+downlaod
+data*
+__pycache__
+log.txt
+download

@@ -1,0 +1,23 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "weather-charts-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8775", "--directory", "B:/workspaces/Jo/flutter/weather_charts/example/build/web"],
+      "port": 8775
+    },
+    {
+      "name": "weather-chart-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8776", "--directory", "B:/workspaces/Jo/flutter/weather_chart/example/build/web"],
+      "port": 8776
+    },
+    {
+      "name": "chart-web",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8777", "--directory", "B:/workspaces/Jo/flutter/chart/example/build/web"],
+      "port": 8777
+    }
+  ]
+}

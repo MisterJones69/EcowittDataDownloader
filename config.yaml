@@ -10,8 +10,12 @@ sd:
   file_base: http://{host}:81              # files are served from port 81
   out_dir: download
   state_file: .sync_state.json             # inside out_dir
-  # a month's file counts as complete once downloaded this long after the month ended
+  # past months' files are only copied when their size differs from the last copy, plus one
+  # final copy this long after the month ended (catches rows written at the very end)
   settle_margin_hours: 24
+  # seconds between SD syncs when run without --sd/--all/--rest (combined loop with REST);
+  # each sync re-downloads all files of the current month (yyyymm)
+  interval: 600
 
 rest:
   out_dir: download_rest

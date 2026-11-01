@@ -4,12 +4,19 @@ The gateway's file server offers no Last-Modified/ETag/Content-Length and reject
 and the listing only reports rounded sizes ("3MB"). So a file is (re)downloaded when:
   - it does not exist locally, or
   - its listed size differs from the one recorded at the last download, or
-  - its month (YYYYMM name prefix) was not yet over when it was last downloaded,
-    i.e. the gateway may have appended rows since.
-Use --all to download everything regardless.
+  - its month (YYYYMM name prefix) is the current one, i.e. the gateway is still
+    appending rows, or
+  - its month is over but the last download was made before the month settled
+    (settle_margin_hours after month end): one final copy to catch the last rows.
+Files of past months are otherwise only copied when they differ from the local copy.
+Use --sd to sync once and exit, --all to download everything once regardless.
 
-With --rest the script instead polls the gateway's local REST API (never the Ecowitt
+With --rest the script only polls the gateway's local REST API (never the Ecowitt
 cloud) and saves each endpoint's JSON to download_rest/, each at its own interval.
+
+Without --sd/--all/--rest both run in one loop, one after the other: the SD sync every
+sd.interval seconds (re-downloading all files of the current month each time) and the
+REST endpoints at their own intervals.
 
 All URLs, paths and timings are read from config.yaml (or --config) at startup.
 """
@@ -37,6 +44,7 @@ OUT_DIR: Path
 STATE_FILE: Path
 TIMEOUT: float
 SETTLE_MARGIN: timedelta
+SD_INTERVAL: float           # seconds between SD syncs in the combined loop
 REST_OUT_DIR: Path
 REST_ENDPOINTS: list[dict]   # each {"url", "file", "interval", optional "paged"}
 
@@ -44,7 +52,7 @@ MONTH_RE = re.compile(r"^(\d{4})(\d{2})")
 
 
 def load_config(path: Path) -> None:
-    global INFO_URL, FILE_BASE, OUT_DIR, STATE_FILE, TIMEOUT, SETTLE_MARGIN
+    global INFO_URL, FILE_BASE, OUT_DIR, STATE_FILE, TIMEOUT, SETTLE_MARGIN, SD_INTERVAL
     global REST_OUT_DIR, REST_ENDPOINTS
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
     gw, sd, rest = cfg["gateway"], cfg["sd"], cfg["rest"]
@@ -59,6 +67,7 @@ def load_config(path: Path) -> None:
     OUT_DIR = SCRIPT_DIR / sd["out_dir"]
     STATE_FILE = OUT_DIR / sd["state_file"]
     SETTLE_MARGIN = timedelta(hours=float(sd["settle_margin_hours"]))
+    SD_INTERVAL = float(sd.get("interval", 600))
     REST_OUT_DIR = SCRIPT_DIR / rest["out_dir"]
     REST_ENDPOINTS = [{**e, "url": url(e["url"]), "interval": float(e["interval"])}
                       for e in rest["endpoints"]]
@@ -125,8 +134,14 @@ def update_reason(remote: str, item: dict, target: Path, state: dict) -> str | N
     end = month_end(Path(remote).name)
     if end is None:
         return "no month in name"
-    if datetime.fromisoformat(entry["downloaded"]) < end + SETTLE_MARGIN:
-        return "month still open at last download"
+    now = datetime.now()
+    if now < end:
+        return "current month"
+    # past month: only copied when it differs (size check above), except for one final
+    # copy once the month has settled, if the last copy was made before that
+    settled = end + SETTLE_MARGIN
+    if now >= settled and datetime.fromisoformat(entry["downloaded"]) < settled:
+        return "final copy after month end"
     return None
 
 
@@ -197,6 +212,24 @@ def poll_rest(endpoints: list[dict], pages: int) -> tuple[int, int]:
     return failed, pages
 
 
+def stamp() -> str:
+    return datetime.now().isoformat(sep=" ", timespec="seconds")
+
+
+def rest_tick(due: list[float], intervals: list[float], pages: int) -> tuple[int, int]:
+    """Poll the endpoints that are due and schedule their next poll; returns (failures, pages)."""
+    now = time.monotonic()
+    batch = [i for i, t in enumerate(due) if t <= now]   # config order: get_version first
+    if not batch:
+        return 0, pages
+    failed, pages = poll_rest([REST_ENDPOINTS[i] for i in batch], pages)
+    names = ", ".join(REST_ENDPOINTS[i]["file"] for i in batch)
+    print(f"{stamp()}: {len(batch) - failed}/{len(batch)} saved ({names})")
+    for i in batch:
+        due[i] = now + max(intervals[i], 1.0)
+    return failed, pages
+
+
 def run_rest(override: float | None) -> int:
     """Poll each endpoint at its own interval (or all at `override`; 0 = poll once and exit)."""
     REST_OUT_DIR.mkdir(exist_ok=True)
@@ -204,23 +237,48 @@ def run_rest(override: float | None) -> int:
     due = [0.0] * len(REST_ENDPOINTS)   # monotonic time of each endpoint's next poll
     pages = 1                           # sensor pages, learned from get_version
     while True:
-        now = time.monotonic()
-        batch = [i for i, t in enumerate(due) if t <= now]   # config order: get_version first
-        failed, pages = poll_rest([REST_ENDPOINTS[i] for i in batch], pages)
-        stamp = datetime.now().isoformat(sep=" ", timespec="seconds")
-        names = ", ".join(REST_ENDPOINTS[i]["file"] for i in batch)
-        print(f"{stamp}: {len(batch) - failed}/{len(batch)} saved ({names})")
+        failed, pages = rest_tick(due, intervals, pages)
         if override is not None and override <= 0:
             return 1 if failed else 0
-        for i in batch:
-            due[i] = now + max(intervals[i], 1.0)
         time.sleep(max(0.0, min(due) - time.monotonic()))
+
+
+def run_sd(force: bool) -> int:
+    """Sync the SD card once; returns the number of failed downloads."""
+    OUT_DIR.mkdir(exist_ok=True)
+    state = load_state()
+    ok, skipped, failed = sync("", state, force)
+    save_state(state)
+    print(f"{stamp()}: SD done: {ok} downloaded, {skipped} up to date, {failed} failed -> {OUT_DIR}")
+    return failed
+
+
+def run_loop() -> int:
+    """Run the SD sync every SD_INTERVAL seconds and the REST polls at their intervals,
+    one after the other in a single loop. The SD sync re-downloads all files of the
+    current month each time, other files only when they differ (see update_reason)."""
+    REST_OUT_DIR.mkdir(exist_ok=True)
+    intervals = [e["interval"] for e in REST_ENDPOINTS]
+    due = [0.0] * len(REST_ENDPOINTS)
+    pages = 1
+    sd_due = 0.0
+    while True:
+        if sd_due <= time.monotonic():
+            sd_due = time.monotonic() + max(SD_INTERVAL, 1.0)
+            try:
+                run_sd(False)
+            except Exception as exc:   # e.g. gateway unreachable: retry next interval
+                print(f"{stamp()}: SD sync FAILED: {exc}", file=sys.stderr)
+        _, pages = rest_tick(due, intervals, pages)
+        time.sleep(max(0.0, min(min(due), sd_due) - time.monotonic()))
 
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--all", action="store_true", help="download every file, ignoring the sync state")
-    parser.add_argument("--rest", action="store_true", help="poll the gateway's local REST API instead of the SD card")
+    parser.add_argument("--sd", action="store_true", help="sync the SD card once and exit")
+    parser.add_argument("--all", action="store_true",
+                        help="sync the SD card once, downloading every file regardless of the sync state")
+    parser.add_argument("--rest", action="store_true", help="only poll the gateway's local REST API")
     parser.add_argument("--interval", type=float,
                         help="seconds between REST polls for all endpoints, overriding the config "
                              "(0 = poll once and exit)")
@@ -229,18 +287,15 @@ def main() -> int:
     args = parser.parse_args()
     load_config(args.config)
 
-    if args.rest:
-        try:
-            return run_rest(args.interval)
-        except KeyboardInterrupt:
-            return 0
+    if args.sd or args.all:
+        return 1 if run_sd(args.all) else 0
 
-    OUT_DIR.mkdir(exist_ok=True)
-    state = load_state()
-    ok, skipped, failed = sync("", state, args.all)
-    save_state(state)
-    print(f"\nDone: {ok} downloaded, {skipped} up to date, {failed} failed -> {OUT_DIR}")
-    return 1 if failed else 0
+    try:
+        if args.rest:
+            return run_rest(args.interval)
+        return run_loop()
+    except KeyboardInterrupt:
+        return 0
 
 
 if __name__ == "__main__":

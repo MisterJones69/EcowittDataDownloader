@@ -1,0 +1,46 @@
+# Settings for download_sd.py
+# "{host}" in URLs is replaced by gateway.host. Relative paths are relative to the script's folder.
+
+gateway:
+  host: 192.168.0.10        # always the local IP, never the Ecowitt cloud
+  timeout: 60               # seconds per HTTP request
+
+sd:
+  info_url: http://{host}/get_sdmmc_info   # JSON listing used by cardInfo.html
+  file_base: http://{host}:81              # files are served from port 81
+  out_dir: download
+  state_file: .sync_state.json             # inside out_dir
+  # a month's file counts as complete once downloaded this long after the month ended
+  settle_margin_hours: 24
+
+rest:
+  out_dir: download_rest
+  # each endpoint: url, file name (without .json), interval = seconds between its polls
+  # (--interval on the command line overrides all of them, 0 = poll once and exit)
+  endpoints:
+    - url: http://{host}/get_version
+      file: version
+      interval: 3600
+    - url: http://{host}/get_device_info
+      file: device_info
+      interval: 18000
+    - url: http://{host}/get_livedata_info
+      file: live_data
+      interval: 15
+    - url: http://{host}/get_calibration_data
+      file: calibration_data
+      interval: 18000
+    - url: http://{host}/get_ws_settings
+      file: ws_settings
+      interval: 120
+    - url: http://{host}/get_network_info
+      file: network_info
+      interval: 60
+    - url: http://{host}/get_rain_totals
+      file: rain_totals
+      interval: 300
+    - url: http://{host}/get_sensors_info
+      file: sensor_info
+      interval: 60
+      # fetched as ?page=1..N and merged; N is "sensorid_page" from an earlier endpoint (get_version)
+      paged: true

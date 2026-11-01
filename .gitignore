@@ -8,3 +8,4 @@ data*
 __pycache__
 log.txt
 download
+download_rest

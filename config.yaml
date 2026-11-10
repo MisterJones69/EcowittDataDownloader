@@ -1,5 +1,9 @@
 # Settings for download_sd.py
-# "{host}" in URLs is replaced by gateway.host. Relative paths are relative to the script's folder.
+# "{host}" in URLs is replaced by gateway.host.
+
+# Root folder for all downloaded data, absolute or relative to the script's folder.
+# --data-dir on the command line replaces it.
+base_path: .
 
 gateway:
   host: 192.168.0.11        # always the local IP, never the Ecowitt cloud
@@ -8,7 +12,7 @@ gateway:
 sd:
   info_url: http://{host}/get_sdmmc_info   # JSON listing used by cardInfo.html
   file_base: http://{host}:81              # files are served from port 81
-  out_dir: download
+  out_dir: download                        # relative to base_path
   state_file: .sync_state.json             # inside out_dir
   # past months' files are only copied when their size differs from the last copy, plus one
   # final copy this long after the month ended (catches rows written at the very end)
@@ -18,7 +22,7 @@ sd:
   interval: 600
 
 rest:
-  out_dir: download_rest
+  out_dir: download_rest                   # relative to base_path
   # each endpoint: url, file name (without .json), interval = seconds between its polls
   # (--interval on the command line overrides all of them, 0 = poll once and exit)
   endpoints:

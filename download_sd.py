@@ -19,6 +19,8 @@ sd.interval seconds (re-downloading all files of the current month each time) an
 REST endpoints at their own intervals.
 
 All URLs, paths and timings are read from config.yaml (or --config) at startup.
+The output folders are base_path/sd.out_dir and base_path/rest.out_dir; --data-dir
+replaces base_path.
 """
 
 import argparse
@@ -51,7 +53,8 @@ REST_ENDPOINTS: list[dict]   # each {"url", "file", "interval", optional "paged"
 MONTH_RE = re.compile(r"^(\d{4})(\d{2})")
 
 
-def load_config(path: Path) -> None:
+def load_config(path: Path, data_dir: Path | None = None) -> None:
+    """Read the settings; data_dir (from --data-dir) replaces base_path from the config."""
     global INFO_URL, FILE_BASE, OUT_DIR, STATE_FILE, TIMEOUT, SETTLE_MARGIN, SD_INTERVAL
     global REST_OUT_DIR, REST_ENDPOINTS
     cfg = yaml.safe_load(path.read_text(encoding="utf-8"))
@@ -61,14 +64,26 @@ def load_config(path: Path) -> None:
     def url(u: str) -> str:
         return u.format(host=host)
 
+    if data_dir is not None:
+        # relative --data-dir is relative to the current working directory
+        base_path = data_dir.resolve()
+    else:
+        # relative base_path is relative to the script's folder
+        base_path = (SCRIPT_DIR / str(cfg.get("base_path", "."))).resolve()
+
+    def out_dir(section: str, value: str) -> Path:
+        if Path(value).is_absolute():
+            raise ValueError(f"{section}.out_dir must be a relative path (relative to base_path): {value}")
+        return base_path / value
+
     TIMEOUT = float(gw["timeout"])
     INFO_URL = url(sd["info_url"])
     FILE_BASE = url(sd["file_base"]).rstrip("/")
-    OUT_DIR = SCRIPT_DIR / sd["out_dir"]
+    OUT_DIR = out_dir("sd", sd["out_dir"])
     STATE_FILE = OUT_DIR / sd["state_file"]
     SETTLE_MARGIN = timedelta(hours=float(sd["settle_margin_hours"]))
     SD_INTERVAL = float(sd.get("interval", 600))
-    REST_OUT_DIR = SCRIPT_DIR / rest["out_dir"]
+    REST_OUT_DIR = out_dir("rest", rest["out_dir"])
     REST_ENDPOINTS = [{**e, "url": url(e["url"]), "interval": float(e["interval"])}
                       for e in rest["endpoints"]]
 
@@ -232,7 +247,7 @@ def rest_tick(due: list[float], intervals: list[float], pages: int) -> tuple[int
 
 def run_rest(override: float | None) -> int:
     """Poll each endpoint at its own interval (or all at `override`; 0 = poll once and exit)."""
-    REST_OUT_DIR.mkdir(exist_ok=True)
+    REST_OUT_DIR.mkdir(parents=True, exist_ok=True)
     intervals = [e["interval"] if override is None else override for e in REST_ENDPOINTS]
     due = [0.0] * len(REST_ENDPOINTS)   # monotonic time of each endpoint's next poll
     pages = 1                           # sensor pages, learned from get_version
@@ -245,7 +260,7 @@ def run_rest(override: float | None) -> int:
 
 def run_sd(force: bool) -> int:
     """Sync the SD card once; returns the number of failed downloads."""
-    OUT_DIR.mkdir(exist_ok=True)
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
     state = load_state()
     ok, skipped, failed = sync("", state, force)
     save_state(state)
@@ -257,7 +272,7 @@ def run_loop() -> int:
     """Run the SD sync every SD_INTERVAL seconds and the REST polls at their intervals,
     one after the other in a single loop. The SD sync re-downloads all files of the
     current month each time, other files only when they differ (see update_reason)."""
-    REST_OUT_DIR.mkdir(exist_ok=True)
+    REST_OUT_DIR.mkdir(parents=True, exist_ok=True)
     intervals = [e["interval"] for e in REST_ENDPOINTS]
     due = [0.0] * len(REST_ENDPOINTS)
     pages = 1
@@ -284,8 +299,11 @@ def main() -> int:
                              "(0 = poll once and exit)")
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG,
                         help=f"settings file (default {DEFAULT_CONFIG.name})")
+    parser.add_argument("--data-dir", type=Path,
+                        help="data folder, replaces base_path from the config; sd.out_dir and "
+                             "rest.out_dir are placed below it (created if missing)")
     args = parser.parse_args()
-    load_config(args.config)
+    load_config(args.config, args.data_dir)
 
     if args.sd or args.all:
         return 1 if run_sd(args.all) else 0

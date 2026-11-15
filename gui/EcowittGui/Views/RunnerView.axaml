@@ -1,0 +1,119 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:EcowittGui.ViewModels"
+             x:Class="EcowittGui.Views.RunnerView"
+             x:DataType="vm:RunnerViewModel">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.label">
+      <Setter Property="VerticalAlignment" Value="Center" />
+      <Setter Property="Margin" Value="0,0,12,0" />
+    </Style>
+    <Style Selector="TextBlock.hint">
+      <Setter Property="Foreground" Value="#6B7280" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.log">
+      <Setter Property="FontFamily" Value="Cascadia Mono, Consolas, monospace" />
+      <Setter Property="FontSize" Value="12" />
+      <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+    <Style Selector="TextBlock.log.error">
+      <Setter Property="Foreground" Value="#B91C1C" />
+    </Style>
+    <Style Selector="TextBlock.log.info">
+      <Setter Property="Foreground" Value="#1D4ED8" />
+      <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style Selector="ListBox.log ListBoxItem">
+      <Setter Property="Padding" Value="8,1" />
+      <Setter Property="MinHeight" Value="0" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,Auto,*" Margin="16">
+    <!-- options -->
+    <Border Grid.Row="0" Classes="card">
+      <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto,Auto,Auto,Auto,Auto,Auto" RowSpacing="8">
+        <TextBlock Grid.Row="0" Grid.ColumnSpan="3" Classes="h2" Text="download_sd.py – Optionen" />
+
+        <TextBlock Grid.Row="1" Classes="label" Text="Modus" VerticalAlignment="Top" Margin="0,6,12,0" />
+        <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Spacing="4">
+          <WrapPanel>
+            <RadioButton GroupName="mode" Margin="0,0,20,0" IsChecked="{Binding IsLoop}"
+                         Content="SD + REST in Schleife (ohne Flag)" />
+            <RadioButton GroupName="mode" Margin="0,0,20,0" IsChecked="{Binding IsSd}"
+                         Content="--sd  (SD einmal synchronisieren)" />
+            <RadioButton GroupName="mode" Margin="0,0,20,0" IsChecked="{Binding IsAll}"
+                         Content="--all  (alle SD-Dateien neu laden)" />
+            <RadioButton GroupName="mode" IsChecked="{Binding IsRest}"
+                         Content="--rest  (nur REST-API abfragen)" />
+          </WrapPanel>
+          <TextBlock Classes="hint" Text="{Binding ModeDescription}" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="2" Classes="label" Text="--interval" />
+        <StackPanel Grid.Row="2" Grid.Column="1" Grid.ColumnSpan="2" Orientation="Horizontal" Spacing="10"
+                    IsEnabled="{Binding IsRest}">
+          <CheckBox IsChecked="{Binding UseInterval}" Content="Intervall für alle Endpunkte überschreiben" />
+          <NumericUpDown Value="{Binding Interval}" Minimum="0" Increment="5" FormatString="0.##" Width="150"
+                         IsEnabled="{Binding UseInterval}" />
+          <TextBlock Classes="hint" VerticalAlignment="Center"
+                     Text="Sekunden; 0 = jeden Endpunkt einmal abfragen und beenden (nur mit --rest)" />
+        </StackPanel>
+
+        <TextBlock Grid.Row="3" Classes="label" Text="--config" />
+        <TextBox Grid.Row="3" Grid.Column="1" Text="{Binding ConfigPath}"
+                 PlaceholderText="leer = config.yaml neben dem Skript" />
+        <Button Grid.Row="3" Grid.Column="2" Margin="8,0,0,0" Content="Durchsuchen …" Click="BrowseConfig" />
+
+        <TextBlock Grid.Row="4" Classes="label" Text="--data-dir" />
+        <TextBox Grid.Row="4" Grid.Column="1" Text="{Binding DataDir}"
+                 PlaceholderText="leer = base_path aus der Konfiguration (Ziel für download/ und download_rest/)" />
+        <Button Grid.Row="4" Grid.Column="2" Margin="8,0,0,0" Content="Durchsuchen …" Click="BrowseDataDir" />
+
+        <TextBlock Grid.Row="5" Classes="label" Text="Python" />
+        <TextBox Grid.Row="5" Grid.Column="1" Text="{Binding PythonExe}"
+                 PlaceholderText="python, py oder voller Pfad zu python.exe (venv)" />
+        <Button Grid.Row="5" Grid.Column="2" Margin="8,0,0,0" Content="Durchsuchen …" Click="BrowsePython" />
+
+        <TextBlock Grid.Row="6" Classes="label" Text="Skript" />
+        <TextBox Grid.Row="6" Grid.Column="1" Text="{Binding ScriptPath}" />
+        <Button Grid.Row="6" Grid.Column="2" Margin="8,0,0,0" Content="Durchsuchen …" Click="BrowseScript" />
+      </Grid>
+    </Border>
+
+    <!-- command line + buttons -->
+    <Grid Grid.Row="1" ColumnDefinitions="*,Auto" Margin="0,12">
+      <Border Classes="card" Padding="10,6" Background="#111827" BorderThickness="0">
+        <SelectableTextBlock Text="{Binding CommandPreview}" Foreground="#E5E7EB" TextWrapping="Wrap"
+                             FontFamily="Cascadia Mono, Consolas, monospace" FontSize="12"
+                             VerticalAlignment="Center" />
+      </Border>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" Margin="12,0,0,0" VerticalAlignment="Center">
+        <Button Content="▶ Starten" Command="{Binding StartCommand}" Classes="accent" MinWidth="110" />
+        <Button Content="■ Stoppen" Command="{Binding StopCommand}" MinWidth="110" />
+        <Button Content="--help" Command="{Binding ShowHelpCommand}" />
+        <Button Content="Log leeren" Command="{Binding ClearLogCommand}" />
+      </StackPanel>
+    </Grid>
+
+    <!-- output -->
+    <Border Grid.Row="2" Classes="card" Padding="0">
+      <Grid RowDefinitions="Auto,*">
+        <Grid ColumnDefinitions="*,Auto" Margin="12,8">
+          <TextBlock Classes="h2" Margin="0" Text="Ausgabe" />
+          <TextBlock Grid.Column="1" Classes="muted" Text="{Binding Status}" />
+        </Grid>
+        <ListBox Grid.Row="1" x:Name="LogList" Classes="log" ItemsSource="{Binding Log}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:LogLine">
+              <SelectableTextBlock Classes="log" Classes.error="{Binding IsError}" Classes.info="{Binding IsInfo}"
+                                   Text="{Binding Text}" />
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Grid>
+    </Border>
+  </Grid>
+</UserControl>

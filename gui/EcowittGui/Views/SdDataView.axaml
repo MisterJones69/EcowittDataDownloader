@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:EcowittGui.ViewModels"
+             xmlns:m="using:EcowittGui.Models"
+             xmlns:views="using:EcowittGui.Views"
+             xmlns:sp="using:ScottPlot.Avalonia"
+             x:Class="EcowittGui.Views.SdDataView"
+             x:DataType="vm:SdDataViewModel">
+  <UserControl.Styles>
+    <Style Selector="TreeViewItem">
+      <Setter Property="IsExpanded" Value="True" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*" Margin="16">
+    <!-- folder bar -->
+    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+      <StackPanel>
+        <TextBlock Classes="h1" Text="SD-Karten-Daten" />
+        <SelectableTextBlock Classes="muted" Text="{Binding Folder}" />
+        <TextBlock Foreground="#B91C1C" Text="{Binding Error}" IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Button Content="⟳ Neu laden" Command="{Binding RefreshCommand}" />
+        <Button Content="Ordner öffnen" Command="{Binding OpenFolderCommand}" />
+      </StackPanel>
+    </Grid>
+
+    <Grid Grid.Row="1" ColumnDefinitions="260,4,300,4,*">
+      <!-- file kinds and months -->
+      <Border Classes="card" Padding="4">
+        <TreeView ItemsSource="{Binding Groups}" SelectedItem="{Binding SelectedNode}">
+          <TreeView.DataTemplates>
+            <TreeDataTemplate DataType="vm:SdGroupNode" ItemsSource="{Binding Items}">
+              <StackPanel Margin="0,4">
+                <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+                <TextBlock Classes="muted" FontSize="11" TextWrapping="Wrap" Text="{Binding Description}" />
+              </StackPanel>
+            </TreeDataTemplate>
+            <DataTemplate DataType="m:SdMonthSet">
+              <StackPanel>
+                <TextBlock Text="{Binding Label}" />
+                <TextBlock Classes="muted" FontSize="11" Text="{Binding Details}" />
+              </StackPanel>
+            </DataTemplate>
+            <DataTemplate DataType="vm:SyncStateNode">
+              <StackPanel>
+                <TextBlock Text="{Binding Label}" />
+                <TextBlock Classes="muted" FontSize="11" Text="{Binding Details}" />
+              </StackPanel>
+            </DataTemplate>
+          </TreeView.DataTemplates>
+        </TreeView>
+      </Border>
+      <GridSplitter Grid.Column="1" Background="Transparent" ResizeDirection="Columns" />
+
+      <!-- column picker -->
+      <Border Grid.Column="2" Classes="card" Padding="8">
+        <Grid RowDefinitions="Auto,Auto,Auto,Auto,*">
+          <TextBlock Classes="h2" Text="Messwerte" />
+          <TextBox Grid.Row="1" Text="{Binding ColumnFilter}" PlaceholderText="Filtern (z. B. Temperature, CH2) …"
+                   Margin="0,0,0,6" />
+          <CheckBox Grid.Row="2" IsChecked="{Binding HideEmptyColumns}" Content="Leere Spalten ausblenden" />
+          <CheckBox Grid.Row="3" IsChecked="{Binding OnlyCheckedInTable}" Content="Tabelle: nur angehakte Spalten" />
+          <ScrollViewer Grid.Row="4" Margin="0,6,0,0">
+            <ItemsControl ItemsSource="{Binding ColumnGroups}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="vm:ColumnGroupViewModel">
+                  <StackPanel Margin="0,4,0,6">
+                    <TextBlock FontWeight="SemiBold" Foreground="#1D4ED8" Text="{Binding Title}" Margin="0,0,0,2" />
+                    <ItemsControl ItemsSource="{Binding Columns}">
+                      <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:ColumnItemViewModel">
+                          <CheckBox IsChecked="{Binding IsChecked}" IsEnabled="{Binding IsEnabled}"
+                                    MinHeight="24" Padding="6,0,0,0">
+                            <TextBlock Text="{Binding Display}" FontSize="12" TextWrapping="Wrap" />
+                          </CheckBox>
+                        </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                  </StackPanel>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </ScrollViewer>
+        </Grid>
+      </Border>
+      <GridSplitter Grid.Column="3" Background="Transparent" ResizeDirection="Columns" />
+
+      <!-- chart and table -->
+      <Border Grid.Column="4" Classes="card" Padding="8">
+        <Grid RowDefinitions="Auto,*">
+          <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{Binding Summary}" TextWrapping="Wrap" VerticalAlignment="Center" />
+            <ProgressBar Grid.Column="1" IsIndeterminate="True" Width="80" IsVisible="{Binding IsLoading}" />
+          </Grid>
+          <TabControl Grid.Row="1" x:Name="ViewTabs">
+            <TabItem Header="Diagramm">
+              <Grid RowDefinitions="*,Auto">
+                <sp:AvaPlot x:Name="Plot" />
+                <TextBlock Grid.Row="1" Classes="muted" FontSize="11"
+                           Text="Mausrad: zoomen · linke Maustaste ziehen: verschieben · rechte Maustaste ziehen: Bereich zoomen · Doppelklick (mittlere Taste): zurücksetzen" />
+              </Grid>
+            </TabItem>
+            <TabItem Header="Tabelle">
+              <Grid RowDefinitions="Auto,*">
+                <CheckBox IsChecked="{Binding NewestFirst}" Content="Neueste zuerst" />
+                <views:DynamicTable Grid.Row="1" Columns="{Binding TableColumns}" Rows="{Binding TableRows}" />
+              </Grid>
+            </TabItem>
+          </TabControl>
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>

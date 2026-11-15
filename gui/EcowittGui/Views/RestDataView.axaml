@@ -1,0 +1,105 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:EcowittGui.ViewModels"
+             xmlns:views="using:EcowittGui.Views"
+             x:Class="EcowittGui.Views.RestDataView"
+             x:DataType="vm:RestDataViewModel">
+  <UserControl.Styles>
+    <Style Selector="TextBlock.stale">
+      <Setter Property="Foreground" Value="#B45309" />
+    </Style>
+  </UserControl.Styles>
+
+  <Grid RowDefinitions="Auto,*" Margin="16">
+    <!-- folder bar -->
+    <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,12">
+      <StackPanel>
+        <TextBlock Classes="h1" Text="REST-API-Daten" />
+        <SelectableTextBlock Classes="muted" Text="{Binding Folder}" />
+        <TextBlock Foreground="#B91C1C" Text="{Binding Error}" IsVisible="{Binding Error, Converter={x:Static ObjectConverters.IsNotNull}}" />
+      </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+        <Button Content="⟳ Neu laden" Command="{Binding RefreshCommand}" />
+        <Button Content="Ordner öffnen" Command="{Binding OpenFolderCommand}" />
+      </StackPanel>
+    </Grid>
+
+    <Grid Grid.Row="1" ColumnDefinitions="280,4,*">
+      <!-- one entry per endpoint file -->
+      <Border Classes="card" Padding="4">
+        <ListBox ItemsSource="{Binding Files}" SelectedItem="{Binding SelectedFile}" Background="Transparent">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="vm:RestFileItem">
+              <StackPanel Margin="0,2">
+                <TextBlock FontWeight="SemiBold" Text="{Binding Title}" />
+                <TextBlock Classes="muted" FontSize="11" Text="{Binding Source}" TextWrapping="Wrap" />
+                <TextBlock FontSize="11" Classes="muted" Classes.stale="{Binding IsStale}"
+                           Text="{Binding Age, StringFormat='aktualisiert {0}'}" />
+              </StackPanel>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+      </Border>
+      <GridSplitter Grid.Column="1" Background="Transparent" ResizeDirection="Columns" />
+
+      <Border Grid.Column="2" Classes="card" Padding="12,8">
+        <Grid RowDefinitions="Auto,Auto,*">
+          <StackPanel>
+            <TextBlock Classes="h1" Text="{Binding Header}" />
+            <TextBlock Classes="muted" FontSize="12" TextWrapping="Wrap" Text="{Binding SubHeader}" />
+          </StackPanel>
+          <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="16" Margin="0,6">
+            <CheckBox IsChecked="{Binding ShowSecrets}" Content="Geheime Werte anzeigen (Passwörter, Keys)" />
+            <CheckBox IsChecked="{Binding OnlyRegistered}" IsVisible="{Binding IsSensorList}"
+                      Content="Nur angemeldete Sensoren (ID ≠ FFFFFFFF/FFFFFFFE)" />
+          </StackPanel>
+          <TabControl Grid.Row="2">
+            <TabItem Header="Übersicht">
+              <ScrollViewer>
+                <ItemsControl ItemsSource="{Binding Sections}">
+                  <ItemsControl.DataTemplates>
+                    <DataTemplate DataType="vm:KeyValueSectionViewModel">
+                      <Border Classes="card" Margin="0,0,0,10" Background="#FAFAFB">
+                        <StackPanel>
+                          <TextBlock Classes="h2" Text="{Binding Title}" />
+                          <ItemsControl ItemsSource="{Binding Rows}">
+                            <ItemsControl.ItemTemplate>
+                              <DataTemplate x:DataType="vm:KeyValueRowViewModel">
+                                <Grid ColumnDefinitions="280,*" Margin="0,2">
+                                  <TextBlock Classes="muted" Text="{Binding Label}" ToolTip.Tip="{Binding Key}"
+                                             TextWrapping="Wrap" />
+                                  <SelectableTextBlock Grid.Column="1" Text="{Binding Value}" FontWeight="SemiBold"
+                                                       TextWrapping="Wrap" />
+                                </Grid>
+                              </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                          </ItemsControl>
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                    <DataTemplate DataType="vm:TableSectionViewModel">
+                      <Border Classes="card" Margin="0,0,0,10" Background="#FAFAFB">
+                        <StackPanel>
+                          <StackPanel Orientation="Horizontal" Spacing="10">
+                            <TextBlock Classes="h2" Text="{Binding Title}" />
+                            <TextBlock Classes="muted" Text="{Binding Count}" />
+                          </StackPanel>
+                          <views:DynamicTable Columns="{Binding Columns}" Rows="{Binding Rows}" MaxHeight="560" />
+                        </StackPanel>
+                      </Border>
+                    </DataTemplate>
+                  </ItemsControl.DataTemplates>
+                </ItemsControl>
+              </ScrollViewer>
+            </TabItem>
+            <TabItem Header="Rohdaten (JSON)">
+              <TextBox Text="{Binding RawJson}" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap"
+                       FontFamily="Cascadia Mono, Consolas, monospace" FontSize="12"
+                       ScrollViewer.HorizontalScrollBarVisibility="Auto" />
+            </TabItem>
+          </TabControl>
+        </Grid>
+      </Border>
+    </Grid>
+  </Grid>
+</UserControl>
